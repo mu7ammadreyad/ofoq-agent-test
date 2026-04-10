@@ -114,7 +114,19 @@ body { background-color:var(--bg-color); color:var(--black); font-family:var(--f
 .think-bubble { display:flex; gap:10px; animation:fadeIn 0.35s ease; width:100%; margin-bottom:-4px; }
 .think-bubble .think-av { width:32px; height:32px; flex-shrink:0; display:flex; align-items:center; justify-content:center; opacity:0.35; }
 .think-content { padding:10px 14px; border-radius:4px 14px 14px 14px; background:var(--bg-color); border:1px dashed var(--light-grey); font-family:var(--font-mono); font-size:12px; color:var(--text-grey); line-height:1.65; max-width:calc(100% - 42px); white-space:pre-wrap; word-break:break-word; direction:rtl; }
-.think-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-grey); opacity:0.6; margin-bottom:4px; display:flex; align-items:center; gap:4px; }
+.think-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-grey); opacity:0.6; margin-bottom:6px; display:flex; align-items:center; gap:4px; }
+
+/* نابض — يظهر قبل ما يجي المحتوى الفعلي */
+.think-dots { display:inline-flex; gap:4px; align-items:center; height:14px; }
+.think-dots span { width:5px; height:5px; border-radius:50%; background:var(--text-grey); opacity:0.4; animation:think-pulse 1.2s ease-in-out infinite; }
+.think-dots span:nth-child(2) { animation-delay:0.2s; }
+.think-dots span:nth-child(3) { animation-delay:0.4s; }
+@keyframes think-pulse { 0%,80%,100%{opacity:.2;transform:scale(.8)} 40%{opacity:.9;transform:scale(1)} }
+
+/* بعد ما يجي المحتوى — يختفي النابض */
+.think-content.has-content .think-dots { display:none; }
+.think-text { display:none; }
+.think-content.has-content .think-text { display:block; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 
 /* STATUS BAR */
@@ -355,8 +367,11 @@ async function sendMessage(text, fileData) {
     let payload = text;
     if (fileData?.type === 'text') payload = '[File: ' + fileData.name + ']\n' + atob(fileData.content.split(',')[1]) + '\n\n' + text;
 
+    // مرجع للـ thinking bubble الحالية
+    let thinkBubbleEl = null;
+
     try {
-        // URL نسبي — يعمل مع Workers Assets تلقائياً
+        // URL نسبي — يعمل مع Workers Assets تلقائياً بدون أي config
         const resp = await fetch('/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -379,10 +394,31 @@ async function sendMessage(text, fileData) {
                 if (!ln.trim()) continue;
                 try {
                     const ev = JSON.parse(ln);
-                    if (ev.type === 'update')  showUpdatePill(ev.text);
+
+                    // ① thinking_start → bubble نابضة فوراً (قبل الـ AI يفكر)
+                    if (ev.type === 'thinking_start') {
+                        thinkBubbleEl = createThinkBubble();
+                    }
+
+                    // ② thinking → ملّأ الـ bubble بالمحتوى الفعلي
+                    if (ev.type === 'thinking') {
+                        if (!thinkBubbleEl) thinkBubbleEl = createThinkBubble();
+                        fillThinkBubble(thinkBubbleEl, ev.text);
+                    }
+
+                    // ③ update → pill مؤقت (⚙️ تنفيذ / 💾 حفظ...)
+                    if (ev.type === 'update') showUpdatePill(ev.text);
+
+                    // ④ message → الرد النهائي، thinking بقي في bubble خاص به
                     if (ev.type === 'message') {
                         removeUpdateEl();
-                        if (ev.thinking) renderThinkingBubble(ev.thinking);
+                        // لو الـ bubble فارغة (ما جاش thinking) — احذفها
+                        if (thinkBubbleEl) {
+                            const tc = thinkBubbleEl.querySelector('.think-content');
+                            if (tc && !tc.classList.contains('has-content')) {
+                                thinkBubbleEl.remove(); thinkBubbleEl = null;
+                            }
+                        }
                         renderMessage('ai', ev.text, null);
                         chatHistory.push({ role: 'assistant', content: ev.text });
                         saveSession(text);
@@ -392,6 +428,7 @@ async function sendMessage(text, fileData) {
         }
     } catch(e) {
         removeUpdateEl();
+        if (thinkBubbleEl) { thinkBubbleEl.remove(); thinkBubbleEl = null; }
         if (e.name !== 'AbortError') await runOfflineMsg(text);
     } finally {
         isGenerating = false; toggleSendButtonState(false); abortController = null;
@@ -450,14 +487,30 @@ function renderMessage(role, text, fileData) {
     scrollToBottom();
 }
 
-function renderThinkingBubble(text) {
+// ── THINK BUBBLE (دائمة في الشات) ──────────────────────────────
+function createThinkBubble() {
     const container = document.getElementById('messages');
     const d = document.createElement('div');
     d.className = 'think-bubble';
     d.innerHTML =
-        '<div class="think-av"><svg width="20" height="20" viewBox="0 0 100 100" fill="none"><path d="M50 15L85 80H15L50 15Z" stroke-width="5" stroke-linejoin="round" stroke="currentColor"/></svg></div>' +
-        '<div class="think-content"><div class="think-label"><i class="ph ph-brain"></i> يفكر بصوت عالٍ</div>' + escHtml(text) + '</div>';
+        '<div class="think-av"><svg width="20" height="20" viewBox="0 0 100 100" fill="none">' +
+        '<path d="M50 15L85 80H15L50 15Z" stroke-width="5" stroke-linejoin="round" stroke="currentColor"/></svg></div>' +
+        '<div class="think-content">' +
+          '<div class="think-label"><i class="ph ph-brain"></i> يفكر بصوت عالٍ</div>' +
+          '<div class="think-dots"><span></span><span></span><span></span></div>' +
+          '<div class="think-text"></div>' +
+        '</div>';
     container.appendChild(d);
+    scrollToBottom();
+    return d;
+}
+function fillThinkBubble(el, text) {
+    if (!el) return;
+    const tc   = el.querySelector('.think-content');
+    const txt  = el.querySelector('.think-text');
+    if (!tc || !txt) return;
+    txt.textContent = text;
+    tc.classList.add('has-content'); // يخفي النابض ويظهر النص
     scrollToBottom();
 }
 
