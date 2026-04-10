@@ -27,8 +27,8 @@ directory = "./assets"
 # ── Workers KV (الذاكرة: tokens، settings، logs) ────────────────
 [[kv_namespaces]]
 binding    = "OFOQ_KV"
-id         = "REPLACE_WITH_YOUR_KV_ID"
-preview_id = "REPLACE_WITH_YOUR_KV_ID"
+id         = "9b5741c163204d709d82d014751855af"
+preview_id = "9b5741c163204d709d82d014751855af"
 
 # ── Cloudflare Workflows (قلب النشر التلقائي) ───────────────────
 [[workflows]]
