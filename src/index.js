@@ -221,13 +221,22 @@ async function evalCode(env, code, purposeLabel, sendUpd) {
 }
 
 // ================================================================
-// SECTION 4 — AI ENGINE (Gemini + Gemma Fallback)
+// SECTION 4 — AI ENGINE (Gemini 2.5 Flash + Gemma 3 Fallback)
+// كلاهما عبر نفس Google AI Studio API — مفتاح واحد يكفي
 // ================================================================
 async function callAI(env, messages, systemPrompt, useGemma = false) {
-  const model  = useGemma ? (env.GEMMA_MODEL  || 'gemma-4-26b-a4b-it')               : (env.GEMINI_MODEL || 'gemma-4-26b-a4b-it');
-  const apiKey = useGemma ? (env.GEMMA_API_KEY || env.GEMINI_API_KEY)             : env.GEMINI_API_KEY;
-  const base   = env.GEMINI_BASE || 'https://generativelanguage.googleapis.com/v1beta';
-  const url    = `${base}/models/${model}:generateContent?key=${apiKey}`;
+  // النموذجان يشتغلان على نفس الـ endpoint بنفس الـ API key
+  const model  = useGemma
+    ? 'gemma-3-27b-it'                    // ← Gemma 3 27B — fallback عند rate limit
+    : 'gemma-4-26b-a4b-it';   // ← Gemini 2.5 Flash — primary
+
+  // كلاهما يستخدم GEMINI_API_KEY (GEMMA_API_KEY اختياري للـ quota منفصل)
+  const apiKey = useGemma
+    ? (env.GEMMA_API_KEY || env.GEMINI_API_KEY)
+    : env.GEMINI_API_KEY;
+
+  const base = 'https://generativelanguage.googleapis.com/v1beta';
+  const url  = `${base}/models/${model}:generateContent?key=${apiKey}`;
 
   const body = {
     contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
@@ -590,12 +599,14 @@ async function getPendingPreview(env, count = 10) {
 
 // ================================================================
 // SECTION 12 — ReAct LOOP ENGINE
+// sendUpd   → update pills مؤقتة (⚙️ جارٍ التنفيذ...)
+// sendThink → thinking bubble دائمة تظهر فوراً في الشات
 // ================================================================
-async function reactLoop(env, userMsg, history, sendUpd) {
+async function reactLoop(env, userMsg, history, sendUpd, sendThink) {
   const sysPrompt   = await buildSystemPrompt(env);
   const conv        = [...history, { role: 'user', content: userMsg }];
   let   execResult  = null;
-  let   lastThinking = null; // ← نحتفظ بالـ thinking الأخير عبر كل الـ loops
+  let   thinkingSent = false; // ← نضمن إن thinking يتبعت مرة واحدة بس
 
   for (let loop = 0; loop < 7; loop++) {
     if (execResult) {
@@ -610,15 +621,16 @@ async function reactLoop(env, userMsg, history, sendUpd) {
     const parsed = parseAI(raw);
     const { action, thinking, message, code, code_purpose, memory_updates, needs_followup, retry_on_fail } = parsed;
 
-    // ← احتفظ بالـ thinking في كل حالة وابعثه كـ update مرئي
-    if (thinking) {
-      lastThinking = thinking;
-      await sendUpd(`🤔 ${thinking}`);
+    // ── إرسال الـ thinking فوراً كحدث منفصل (دائم في الشات) ──────
+    // يُرسَل مرة واحدة فقط — أول thinking يظهر هو المعتمد
+    if (thinking && !thinkingSent) {
+      thinkingSent = true;
+      await sendThink(thinking); // type: 'thinking' — مش 'update'
     }
 
     if (!action || action === 'SPEAK') {
       conv.push({ role: 'assistant', content: message || raw });
-      return { message: message || raw, thinking: lastThinking, history: conv };
+      return { message: message || raw, history: conv };
     }
 
     if (action === 'MEMORY_UPDATE') {
@@ -629,7 +641,7 @@ async function reactLoop(env, userMsg, history, sendUpd) {
       await sendUpd('✅ تم الحفظ!');
       if (!needs_followup) {
         conv.push({ role: 'assistant', content: message || '✅ تم الحفظ' });
-        return { message: message || '✅ تم الحفظ', thinking: lastThinking, history: conv };
+        return { message: message || '✅ تم الحفظ', history: conv };
       }
       execResult = { success: true, saved: true };
       conv.push({ role: 'assistant', content: message || 'تم الحفظ' });
@@ -650,7 +662,7 @@ async function reactLoop(env, userMsg, history, sendUpd) {
         const fr = await callAI(env, conv, sysPrompt);
         const fm = parseAI(fr).message || fr;
         conv.push({ role: 'assistant', content: fm });
-        return { message: fm, thinking: lastThinking, history: conv };
+        return { message: fm, history: conv };
       }
       continue;
     }
@@ -658,24 +670,24 @@ async function reactLoop(env, userMsg, history, sendUpd) {
     if (action === 'PLAN') {
       const res = await buildDailyPlanFromChat(env, sendUpd);
       conv.push({ role: 'assistant', content: res.message });
-      return { message: res.message, thinking: lastThinking, history: conv };
+      return { message: res.message, history: conv };
     }
 
     if (action === 'HEALTH_CHECK') {
       const h   = await runHealthCheck(env, sendUpd);
       const msg = `🏥 **تقرير صحة التوكنز:**\n${Object.entries(h.results).map(([k,v]) => `- ${k}: ${v}`).join('\n')}${h.warnings.length ? '\n\n⚠️ **تحذيرات:**\n' + h.warnings.join('\n') : '\n\n✅ كل شيء سليم!'}`;
       conv.push({ role: 'assistant', content: msg });
-      return { message: msg, thinking: lastThinking, history: conv };
+      return { message: msg, history: conv };
     }
 
     if (action === 'PENDING_PREVIEW') {
       const preview = await getPendingPreview(env, 12);
       conv.push({ role: 'assistant', content: preview });
-      return { message: preview, thinking: lastThinking, history: conv };
+      return { message: preview, history: conv };
     }
 
     conv.push({ role: 'assistant', content: message || raw });
-    return { message: message || raw, thinking: lastThinking, history: conv };
+    return { message: message || raw, history: conv };
   }
 
   return { message: '❌ وصلت للحد الأقصى من الدورات. جرب مرة أخرى.', history: conv };
@@ -693,9 +705,19 @@ async function routeChat(req, env) {
 
   (async () => {
     try {
-      const sendUpd = t => push({ type: 'update', text: t });
-      const result  = await reactLoop(env, message, history, sendUpd);
-      push({ type: 'message', text: result.message, thinking: result.thinking || null, history: result.history });
+      // ① أرسل thinking_start فوراً قبل أي معالجة
+      //    الـ HTML سيعرض bubble نابض فوراً
+      push({ type: 'thinking_start' });
+
+      // ② sendUpd → update pills مؤقتة
+      const sendUpd   = t => push({ type: 'update', text: t });
+      // ③ sendThink → thinking bubble دائمة (تُرسَل مرة واحدة فقط من reactLoop)
+      const sendThink = t => push({ type: 'thinking', text: t });
+
+      const result = await reactLoop(env, message, history, sendUpd, sendThink);
+
+      // ④ message بدون thinking — thinking اتبعت بالفعل كحدث منفصل
+      push({ type: 'message', text: result.message, history: result.history });
     } catch (e) {
       push({ type: 'message', text: `❌ خطأ داخلي: ${e.message}` });
     } finally {
@@ -977,4 +999,4 @@ function jsonRes(obj, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
-    }
+             }
