@@ -1,0 +1,55 @@
+# ================================================================
+#  wrangler.toml — OFOQ Agent v4.0
+#  بسم الله الرحمن الرحيم
+#
+#  قبل الـ deploy على GitHub — خطوتان إلزاميتان:
+#  ─────────────────────────────────────────────
+#  1. اعمل KV namespace:
+#     Cloudflare Dashboard → Workers & Pages → KV → Create namespace
+#     الاسم: OFOQ_KV
+#     انسخ الـ ID واستبدل REPLACE_WITH_YOUR_KV_ID بيه هنا
+#
+#  2. بعد أول deploy اضبط الـ secrets في:
+#     Dashboard → Workers → ofoq-agent → Settings → Variables
+#     أضف: GEMINI_API_KEY (من aistudio.google.com)
+#     أضف (اختياري): GEMMA_API_KEY
+# ================================================================
+
+name               = "ofoq-agent"
+main               = "src/index.js"
+compatibility_date = "2025-04-10"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Workers Assets (يخدم assets/index.html تلقائياً) ────────────
+[assets]
+directory = "./assets"
+
+# ── Workers KV (الذاكرة: tokens، settings، logs) ────────────────
+[[kv_namespaces]]
+binding    = "OFOQ_KV"
+id         = "REPLACE_WITH_YOUR_KV_ID"
+preview_id = "REPLACE_WITH_YOUR_KV_ID"
+
+# ── Cloudflare Workflows (قلب النشر التلقائي) ───────────────────
+[[workflows]]
+name       = "ofoq-daily-publish"
+binding    = "PUBLISH_WORKFLOW"
+class_name = "OfoqDailyWorkflow"
+
+# ── Cron Trigger (safety net يومي — يشغل buildDailyPlan) ────────
+# 03:30 UTC = 05:30 Cairo (UTC+2) — قبل الفجر بوقت كافٍ
+[triggers]
+crons = ["30 3 * * *"]
+
+# ── Environment Variables (غير السرية) ──────────────────────────
+[vars]
+GEMINI_MODEL = "gemini-2.5-flash-preview-04-17"
+GEMMA_MODEL  = "gemma-3-27b-it"
+GEMINI_BASE  = "https://generativelanguage.googleapis.com/v1beta"
+GH_API       = "https://api.github.com"
+TAG_PENDING  = "pending"
+TAG_PUBLISHED = "published"
+
+# ── Workflow Limits (اختياري — زيادة الـ CPU لو احتجت) ──────────
+# [limits]
+# cpu_ms = 60000
