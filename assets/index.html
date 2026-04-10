@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>أفق | OFOQ Agent v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+<style>
+:root {
+    --bg-color: #fafafa; --chat-bg: #ffffff; --black: #111111; --text-inv: #ffffff;
+    --light-grey: #e5e5e5; --text-grey: #666666; --input-shadow: 0 10px 40px rgba(0,0,0,0.08);
+    --modal-bg: #ffffff; --font-display: 'IBM Plex Sans Arabic',sans-serif;
+    --font-body: 'IBM Plex Sans Arabic','IBM Plex Sans',sans-serif;
+    --font-mono: 'IBM Plex Mono',monospace; --radius-lg: 24px; --radius-sm: 12px;
+    --sidebar-width: 260px; --accent-error: #ff4d4d;
+}
+[data-theme="dark"] { --bg-color:#111111; --chat-bg:#1a1a1a; --black:#ffffff; --text-inv:#111111; --light-grey:#333333; --text-grey:#aaaaaa; --input-shadow:0 10px 40px rgba(0,0,0,0.5); --modal-bg:#1e1e1e; }
+[data-theme="dark"] .message.user .content { background-color:#2c2c2c!important; color:#ededed!important; }
+
+* { margin:0; padding:0; box-sizing:border-box; outline:none; -webkit-tap-highlight-color:transparent; }
+body { background-color:var(--bg-color); color:var(--black); font-family:var(--font-body); height:100vh; height:100dvh; display:flex; overflow:hidden; font-size:16px; line-height:1.6; transition:background-color 0.3s,color 0.3s; }
+
+/* SIDEBAR */
+.sidebar { width:var(--sidebar-width); background-color:var(--bg-color); border-left:1px solid var(--light-grey); display:flex; flex-direction:column; padding:20px; transition:transform 0.3s cubic-bezier(0.16,1,0.3,1),width 0.3s ease; position:relative; z-index:50; flex-shrink:0; }
+.sidebar.collapsed { transform:translateX(100%); width:0; padding:0; margin-left:0; opacity:0; }
+@media(max-width:768px){ .sidebar{position:fixed;top:0;right:0;height:100%;width:100vw;transform:translateX(100%);border-left:none;background:var(--modal-bg);} .sidebar.mobile-open{transform:translateX(0);opacity:1;padding:20px;} .sidebar.collapsed{width:100vw;} }
+.sidebar-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.close-sidebar-mobile { display:none; background:none; border:none; cursor:pointer; padding:5px; color:var(--black); }
+@media(max-width:768px){ .close-sidebar-mobile{display:block;} }
+.new-chat-btn { display:flex; align-items:center; gap:10px; background:transparent; border:1px solid var(--light-grey); padding:12px 16px; border-radius:var(--radius-sm); cursor:pointer; font-family:var(--font-body); font-weight:500; color:var(--black); transition:all 0.2s ease; width:100%; justify-content:center; }
+.new-chat-btn:hover { background-color:var(--light-grey); }
+.history-label { font-size:12px; color:var(--text-grey); margin-top:24px; margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; }
+.history-item { padding:10px 12px; font-size:14px; color:var(--black); border-radius:8px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:background 0.2s; }
+.history-item:hover { background-color:var(--light-grey); }
+
+/* MAIN */
+.main-content { flex:1; position:relative; display:flex; height:100%; width:100%; transition:all 0.4s; }
+.chat-pane { flex:1; display:flex; flex-direction:column; position:relative; height:100%; transition:width 0.4s ease; min-width:320px; justify-content:space-between; }
+
+/* AGENT UPDATE PILL */
+.agent-update { display:flex; align-items:center; gap:8px; padding:6px 14px; border-radius:20px; background:var(--chat-bg); border:1px solid var(--light-grey); font-size:12px; color:var(--text-grey); font-family:var(--font-mono); animation:fadeIn 0.3s ease; margin:4px 0 4px 0; width:fit-content; }
+.agent-update-dot { width:6px; height:6px; border-radius:50%; background:var(--text-grey); animation:pulse-dot 1s infinite; flex-shrink:0; }
+@keyframes pulse-dot { 0%,100%{opacity:.3} 50%{opacity:1} }
+
+/* HEADER */
+.header-controls { position:absolute; top:20px; right:20px; left:20px; z-index:20; display:flex; justify-content:space-between; pointer-events:none; }
+.header-group { display:flex; gap:8px; pointer-events:auto; }
+.icon-btn { background:var(--chat-bg); border:1px solid transparent; cursor:pointer; padding:8px; border-radius:8px; color:var(--text-grey); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:all 0.2s; }
+.icon-btn:hover { background-color:var(--chat-bg); color:var(--black); border-color:var(--light-grey); }
+
+/* SETTINGS MODAL */
+.settings-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; display:none; justify-content:center; align-items:center; backdrop-filter:blur(5px); }
+.settings-content { background:var(--modal-bg); padding:30px; border-radius:var(--radius-lg); width:90%; max-width:400px; color:var(--black); }
+.settings-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.settings-title { font-size:18px; font-weight:600; }
+.settings-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid var(--light-grey); }
+
+/* CHAT */
+.chat-scroll-area { flex:1; overflow-y:auto; padding:80px 20px 0 20px; display:flex; flex-direction:column; align-items:center; scroll-behavior:smooth; padding-bottom:200px; }
+.message-container { width:100%; max-width:768px; display:flex; flex-direction:column; gap:24px; }
+.message { display:flex; gap:16px; animation:fadeIn 0.4s ease; width:100%; }
+.message.user { justify-content:flex-end; }
+.message-wrapper { display:flex; flex-direction:column; align-items:flex-end; gap:8px; max-width:85%; }
+.message.ai .message-wrapper { align-items:flex-start; max-width:100%; flex:1; }
+.message.user .content { background-color:#f2f2f2; color:#111111; border-radius:20px 20px 20px 4px; padding:12px 20px; line-height:1.6; word-wrap:break-word; }
+.message.ai .avatar { width:32px; height:32px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.message.ai .avatar svg path { stroke:var(--black); }
+.message.ai .content { padding-top:4px; color:var(--black); width:100%; line-height:1.7; overflow-x:hidden; }
+
+/* HERO */
+.hero-state { position:absolute; top:50%; left:50%; transform:translate(-50%,-60%); text-align:center; width:100%; max-width:600px; padding:20px; transition:opacity 0.3s; }
+.hero-logo path { stroke:var(--black); } .hero-logo circle { fill:var(--black); }
+.hero-title { font-family:var(--font-display); font-size:28px; font-weight:500; margin-bottom:8px; color:var(--black); }
+.hero-sub { font-size:14px; color:var(--text-grey); margin-bottom:28px; }
+.chip { background:var(--chat-bg); border:1px solid var(--light-grey); padding:8px 16px; border-radius:20px; font-size:13px; color:var(--text-grey); cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px; }
+.chip:hover { border-color:var(--black); color:var(--black); transform:translateY(-2px); }
+.chip-active { border-color:var(--black)!important; color:var(--black)!important; background:var(--light-grey)!important; }
+.chip-step::before { content:attr(data-step); width:18px; height:18px; background:var(--light-grey); border-radius:50%; font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; color:var(--text-grey); }
+.chip-active.chip-step::before { background:var(--black); color:white; }
+
+/* INPUT */
+.input-area-wrapper { position:absolute; bottom:0; left:0; right:0; display:flex; flex-direction:column; align-items:center; z-index:30; padding:10px 20px 18px 20px; background:linear-gradient(to top,var(--bg-color) 82%,transparent); }
+.input-container { width:100%; max-width:768px; background:var(--chat-bg); border-radius:var(--radius-lg); padding:16px; display:flex; flex-direction:column; border:1px solid var(--light-grey); transition:border 0.3s; }
+.input-container:focus-within { border-color:#ccc; }
+.input-box { width:100%; border:none; resize:none; font-family:var(--font-body); font-size:16px; max-height:200px; min-height:24px; color:var(--black); background:transparent; }
+.input-box::placeholder { color:var(--text-grey); }
+.input-footer { display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+.action-left { display:flex; gap:8px; align-items:center; }
+.attach-btn { color:var(--text-grey); cursor:pointer; padding:8px; border-radius:50%; display:flex; }
+.attach-btn:hover { color:var(--black); background:var(--light-grey); }
+.send-btn { width:36px; height:36px; background-color:var(--black); border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform 0.2s; }
+.send-btn:hover { transform:scale(1.05); }
+.send-btn svg { stroke:var(--text-inv); width:20px; height:20px; }
+.hidden { display:none!important; }
+
+/* THINKING BUBBLE */
+.think-bubble { display:flex; gap:10px; animation:fadeIn 0.35s ease; width:100%; margin-bottom:-4px; }
+.think-bubble .think-av { width:32px; height:32px; flex-shrink:0; display:flex; align-items:center; justify-content:center; opacity:0.35; }
+.think-content { padding:10px 14px; border-radius:14px 14px 4px 14px; background:var(--bg-color); border:1px dashed var(--light-grey); font-family:var(--font-mono); font-size:12px; color:var(--text-grey); line-height:1.65; max-width:calc(100% - 42px); white-space:pre-wrap; word-break:break-word; }
+.think-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-grey); opacity:0.6; margin-bottom:4px; display:flex; align-items:center; gap:4px; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+/* STATUS BAR */
+.status-bar { position:fixed; top:0; left:0; right:0; height:3px; background:transparent; z-index:100; }
+.status-bar.loading { background:linear-gradient(90deg,transparent,var(--black),transparent); animation:loading-bar 1.5s infinite; }
+@keyframes loading-bar { 0%{background-position:-100%} 100%{background-position:200%} }
+</style>
+</head>
+<body>
+
+<!-- STATUS BAR -->
+<div class="status-bar" id="statusBar"></div>
+
+<!-- SETTINGS MODAL -->
+<div class="settings-modal" id="settingsModal">
+    <div class="settings-content">
+        <div class="settings-header">
+            <div class="settings-title">الإعدادات</div>
+            <button onclick="toggleSettings(false)" style="background:none;border:none;color:var(--black);cursor:pointer;font-size:20px;display:flex;align-items:center;"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="settings-row">
+            <span>الوضع الليلي</span>
+            <label style="position:relative;display:inline-block;width:40px;height:24px;">
+                <input type="checkbox" id="darkModeToggle" onchange="toggleDarkMode()" style="opacity:0;width:0;height:0;">
+                <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.4s;border-radius:24px;"></span>
+                <span id="sliderKnob" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background-color:white;transition:.4s;border-radius:50%;"></span>
+            </label>
+        </div>
+        <style>input:checked + span{background-color:var(--black)!important}input:checked + span + span{transform:translateX(16px)}</style>
+        <div class="settings-row" style="border-bottom:none;margin-bottom:0;padding-bottom:0;">
+            <div>
+                <div style="font-weight:500;margin-bottom:4px;">حالة النظام</div>
+                <div id="statusInfo" style="font-size:12px;color:var(--text-grey);">جارٍ التحقق...</div>
+            </div>
+            <button onclick="fetchStatus()" style="background:var(--light-grey);border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--black);">تحديث</button>
+        </div>
+    </div>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <button class="close-sidebar-mobile" onclick="toggleSidebar()"><i class="ph ph-arrow-right" style="font-size:22px"></i></button>
+    </div>
+    <button class="new-chat-btn" onclick="resetChat()"><i class="ph ph-plus-circle"></i> محادثة جديدة</button>
+    <div class="history-label">المحادثات الأخيرة</div>
+    <div id="historyList"></div>
+</aside>
+
+<!-- MAIN -->
+<main class="main-content" id="mainContent">
+    <div class="chat-pane" id="chatPane">
+
+        <div class="header-controls">
+            <div class="header-group">
+                <button class="icon-btn" onclick="toggleSettings(true)" title="الإعدادات"><i class="ph ph-user-circle" style="font-size:20px"></i></button>
+            </div>
+            <div class="header-group">
+                <button class="icon-btn" onclick="resetChat()" title="محادثة جديدة"><i class="ph ph-note-pencil" style="font-size:20px"></i></button>
+                <button class="icon-btn" onclick="toggleSidebar()" title="القائمة الجانبية"><i class="ph ph-sidebar-simple" style="font-size:20px"></i></button>
+            </div>
+        </div>
+
+        <!-- HERO -->
+        <div id="hero" class="hero-state">
+            <svg class="hero-logo" width="80" height="80" viewBox="0 0 100 100" fill="none" style="margin-bottom:16px">
+                <path d="M50 15L85 80H15L50 15Z" stroke-width="3" stroke-linejoin="round"/>
+                <circle cx="50" cy="55" r="8"/>
+            </svg>
+            <h1 class="hero-title">أفق — OFOQ Agent v4</h1>
+            <p class="hero-sub">نشر المحتوى الإسلامي تلقائياً · Cloudflare Workflows</p>
+            <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;max-width:560px;margin:0 auto;">
+                <div class="chip chip-step" data-step="1" onclick="runScenario(1)"><i class="ph ph-github-logo"></i> ربط GitHub</div>
+                <div class="chip chip-step" data-step="2" onclick="runScenario(2)"><i class="ph ph-youtube-logo"></i> إضافة YouTube</div>
+                <div class="chip chip-step" data-step="3" onclick="runScenario(3)"><i class="ph ph-instagram-logo"></i> إضافة Instagram</div>
+                <div class="chip chip-step" data-step="4" onclick="runScenario(4)"><i class="ph ph-facebook-logo"></i> إضافة Facebook</div>
+                <div class="chip chip-step" data-step="5" onclick="runScenario(5)"><i class="ph ph-rocket-launch"></i> ابدأ النشر</div>
+                <div class="chip" onclick="fillInput('ما هي حالة النظام؟')"><i class="ph ph-gauge"></i> حالة النظام</div>
+                <div class="chip" onclick="fillInput('اعرض الفيديوهات المعلقة')"><i class="ph ph-video"></i> الفيديوهات</div>
+                <div class="chip" onclick="fillInput('افحص صحة جميع التوكنز')"><i class="ph ph-shield-check"></i> فحص التوكنز</div>
+            </div>
+        </div>
+
+        <!-- CHAT AREA -->
+        <div class="chat-scroll-area" id="chatContainer">
+            <div class="message-container" id="messages"></div>
+        </div>
+
+        <!-- INPUT -->
+        <div class="input-area-wrapper">
+            <div id="filePreviewContainer" style="display:none;width:100%;max-width:768px;margin-bottom:10px;background:var(--chat-bg);padding:8px;border-radius:8px;align-items:center;gap:10px;border:1px solid var(--light-grey);">
+                <div id="previewIcon">📄</div>
+                <span id="previewName" style="font-size:13px;color:var(--black);">file.txt</span>
+                <button onclick="clearFile()" style="margin-right:auto;background:none;border:none;cursor:pointer;">&times;</button>
+            </div>
+            <div class="input-container">
+                <textarea id="userInput" class="input-box" rows="1" placeholder="اكتب رسالتك أو أرفق ملفاً..." oninput="handleInput(this)" onkeydown="handleEnter(event)"></textarea>
+                <div class="input-footer">
+                    <input type="file" id="fileInput" hidden onchange="handleFileSelect(this)">
+                    <div class="action-left">
+                        <div class="attach-btn" onclick="document.getElementById('fileInput').click()" title="إرفاق ملف"><i class="ph ph-paperclip" style="font-size:20px"></i></div>
+                    </div>
+                    <div class="send-btn" id="sendBtn" onclick="handleSendAction()">
+                        <i id="sendIcon" class="ph ph-arrow-up" style="font-size:18px;color:var(--text-inv)"></i>
+                        <i id="stopIcon" class="ph ph-stop-circle hidden" style="font-size:18px;color:var(--text-inv)"></i>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align:center;font-size:11px;color:var(--text-grey);margin-top:8px;opacity:0.6;">
+                OFOQ Agent v4 · Cloudflare Workflows · Workers KV
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+
+// ── SCENARIO CHIPS ──────────────────────────────────────────────
+const SCENARIOS = {
+    1: { msg: 'مرحباً أفق! هذا مفتاح GitHub: ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\nوالـ repo_owner: myusername\nوالـ repo_name: ofoq-videos' },
+    2: { msg: 'هأضيف YouTube:\nclient_id: 123456789.apps.googleusercontent.com\nclient_secret: GOCSPX-xxxxxxxx\nrefresh_token: 1//0gXXXXXXXXXXXXXXXX' },
+    3: { msg: 'هأضيف Instagram:\naccess_token: IGQVJXxxxxxxxxxxxxxx\naccount_id: 17841400000000000' },
+    4: { msg: 'هأضيف Facebook:\naccess_token: EAAxxxxxxxxxxxxxxx\npage_id: 123456789012345' },
+    5: { msg: 'كل شيء جاهز! ابدأ خطة النشر لليوم وأطلق الـ Workflow تلقائياً.' },
+};
+
+function runScenario(step) {
+    const s = SCENARIOS[step]; if (!s) return;
+    const el = document.getElementById('userInput');
+    el.value = s.msg; handleInput(el); el.focus();
+    document.querySelectorAll('.chip-step').forEach(c => c.classList.remove('chip-active'));
+    document.querySelector('[data-step="'+step+'"]')?.classList.add('chip-active');
+}
+
+// ── STATE ───────────────────────────────────────────────────────
+let chatHistory = [], sessions = [], currentSession = Date.now();
+let isGenerating = false, abortController = null, currentFile = null, activeUpdElId = null;
+
+// ── BOOT ────────────────────────────────────────────────────────
+window.addEventListener('load', () => { loadTheme(); fetchStatus(); });
+
+// ── DARK MODE ───────────────────────────────────────────────────
+function toggleDarkMode() {
+    const isDark = document.getElementById('darkModeToggle').checked;
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+}
+function loadTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.getElementById('darkModeToggle').checked = (saved === 'dark');
+}
+
+// ── STATUS ──────────────────────────────────────────────────────
+async function fetchStatus() {
+    try {
+        const r = await fetch('/status');
+        if (!r.ok) throw new Error('not ok');
+        const d = await r.json();
+        const el = document.getElementById('statusInfo');
+        const wf = d.workflow || 'unknown';
+        const wfColor = wf === 'running' || wf === 'waiting' ? '#10b981' : wf === 'complete' ? '#6366f1' : '#888';
+        el.innerHTML = `
+            <span style="color:${d.github==='verified'?'#10b981':'#f59e0b'}">● GitHub: ${d.github||'?'}</span><br>
+            <span style="color:${wfColor}">● Workflow: ${wf}</span><br>
+            <span>📅 نُشر اليوم: ${d.published_today||0} | الفجر: ${d.fajr||'?'}</span>
+        `;
+    } catch (e) {
+        document.getElementById('statusInfo').textContent = 'الـ Worker غير متاح بعد';
+    }
+}
+
+// ── SIDEBAR ─────────────────────────────────────────────────────
+function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    window.innerWidth <= 768 ? sb.classList.toggle('mobile-open') : sb.classList.toggle('collapsed');
+}
+
+// ── SETTINGS ────────────────────────────────────────────────────
+function toggleSettings(show) {
+    document.getElementById('settingsModal').style.display = show ? 'flex' : 'none';
+    if (show) fetchStatus();
+}
+
+// ── FILE ────────────────────────────────────────────────────────
+function handleInput(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+    if (!ta.value) ta.style.height = 'auto';
+}
+function handleEnter(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendAction(); } }
+function fillInput(text) { const el = document.getElementById('userInput'); el.value = text; handleInput(el); el.focus(); }
+function handleFileSelect(input) {
+    const file = input.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        currentFile = { name: file.name, type: file.type.startsWith('image/') ? 'image' : 'text', content: e.target.result, displayData: e.target.result };
+        document.getElementById('filePreviewContainer').style.display = 'flex';
+        document.getElementById('previewName').textContent = file.name;
+        document.getElementById('previewIcon').textContent = currentFile.type === 'image' ? '🖼️' : '📄';
+    };
+    reader.readAsDataURL(file);
+}
+function clearFile() {
+    currentFile = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('filePreviewContainer').style.display = 'none';
+}
+
+// ── SEND ────────────────────────────────────────────────────────
+function handleSendAction() {
+    if (isGenerating) { stopGeneration(); return; }
+    const text = document.getElementById('userInput').value.trim();
+    if (!text && !currentFile) return;
+    sendMessage(text, currentFile);
+}
+function stopGeneration() {
+    if (abortController) { abortController.abort(); abortController = null; }
+    isGenerating = false; toggleSendButtonState(false); removeUpdateEl();
+}
+function toggleSendButtonState(loading) {
+    document.getElementById('sendIcon').classList.toggle('hidden', loading);
+    document.getElementById('stopIcon').classList.toggle('hidden', !loading);
+    document.getElementById('statusBar').className = loading ? 'status-bar loading' : 'status-bar';
+}
+
+async function sendMessage(text, fileData) {
+    document.getElementById('hero').classList.add('hidden');
+    renderMessage('user', text, fileData);
+    chatHistory.push({ role: 'user', content: text });
+    const inputEl = document.getElementById('userInput');
+    inputEl.value = ''; handleInput(inputEl); clearFile();
+    isGenerating = true; toggleSendButtonState(true);
+    abortController = new AbortController();
+
+    let payload = text;
+    if (fileData?.type === 'text') payload = '[File: ' + fileData.name + ']\n' + atob(fileData.content.split(',')[1]) + '\n\n' + text;
+
+    try {
+        // URL نسبي — يعمل مع Workers Assets تلقائياً
+        const resp = await fetch('/chat', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ message: payload, history: chatHistory }),
+            signal:  abortController.signal,
+        });
+
+        if (!resp.ok) { await runOfflineMsg(text); return; }
+
+        const reader = resp.body.getReader();
+        const dec    = new TextDecoder();
+        let   buf    = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const lines = buf.split('\n'); buf = lines.pop();
+            for (const ln of lines) {
+                if (!ln.trim()) continue;
+                try {
+                    const ev = JSON.parse(ln);
+                    if (ev.type === 'update')  showUpdatePill(ev.text);
+                    if (ev.type === 'message') {
+                        removeUpdateEl();
+                        if (ev.thinking) renderThinkingBubble(ev.thinking);
+                        renderMessage('ai', ev.text, null);
+                        chatHistory.push({ role: 'assistant', content: ev.text });
+                        saveSession(text);
+                    }
+                } catch(e) {}
+            }
+        }
+    } catch(e) {
+        removeUpdateEl();
+        if (e.name !== 'AbortError') await runOfflineMsg(text);
+    } finally {
+        isGenerating = false; toggleSendButtonState(false); abortController = null;
+    }
+}
+
+// ── OFFLINE / ERROR MESSAGE ─────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runOfflineMsg(userText) {
+    removeUpdateEl();
+    await sleep(300);
+    const msg = [
+        '### تعذّر الاتصال بالـ Agent',
+        '',
+        'حاولت الوصول للـ Worker لكن لم أتلقَّ رداً.',
+        '',
+        '**الأسباب المحتملة:**',
+        '- الـ Worker لم يتم deploy بعد',
+        '- `GEMINI_API_KEY` غير مُهيأ في Dashboard → Secrets',
+        '- `REPLACE_WITH_YOUR_KV_ID` لم يُستبدل في `wrangler.toml`',
+        '',
+        '**خطوات الحل:**',
+        '1. تحقق إن الـ deploy نجح في Cloudflare Dashboard',
+        '2. أضف `GEMINI_API_KEY` كـ secret في Worker Settings',
+        '3. أنشئ KV namespace واستبدل الـ ID في `wrangler.toml`',
+        '',
+        '> بعد إتمام الإعداد أعد كتابة رسالتك 🌙',
+    ].join('\n');
+    renderMessage('ai', msg, null);
+    chatHistory.push({ role: 'assistant', content: msg });
+}
+
+// ── RENDER ──────────────────────────────────────────────────────
+function renderMessage(role, text, fileData) {
+    const container = document.getElementById('messages');
+    const msgDiv    = document.createElement('div');
+    msgDiv.className = 'message ' + role;
+
+    let fileHtml = '';
+    if (fileData) {
+        if (fileData.type === 'image') {
+            fileHtml = '<div style="border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,0.1);cursor:zoom-in;max-width:200px;"><img src="' + fileData.displayData + '" style="width:100%;display:block;"></div>';
+        } else {
+            fileHtml = '<div style="background:var(--chat-bg);border:1px solid var(--light-grey);border-radius:12px;padding:10px;display:flex;align-items:center;gap:10px;max-width:250px;"><div style="font-size:20px">📄</div><span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(fileData.name) + '</span></div>';
+        }
+    }
+
+    const avatarHtml = role === 'ai'
+        ? '<div class="avatar" style="font-size:0"><svg width="24" height="24" viewBox="0 0 100 100" fill="none"><path d="M50 15L85 80H15L50 15Z" stroke-width="5" stroke-linejoin="round"/></svg></div>'
+        : '';
+
+    msgDiv.innerHTML = avatarHtml + '<div class="message-wrapper">' + fileHtml + '<div class="content markdown-body">' + marked.parse(text || '') + '</div></div>';
+    container.appendChild(msgDiv);
+    hljs.highlightAll();
+    scrollToBottom();
+}
+
+function renderThinkingBubble(text) {
+    const container = document.getElementById('messages');
+    const d = document.createElement('div');
+    d.className = 'think-bubble';
+    d.innerHTML =
+        '<div class="think-av"><svg width="20" height="20" viewBox="0 0 100 100" fill="none"><path d="M50 15L85 80H15L50 15Z" stroke-width="5" stroke-linejoin="round" stroke="currentColor"/></svg></div>' +
+        '<div class="think-content"><div class="think-label"><i class="ph ph-brain"></i> يفكر بصوت عالٍ</div>' + escHtml(text) + '</div>';
+    container.appendChild(d);
+    scrollToBottom();
+}
+
+function showUpdatePill(text) {
+    removeUpdateEl();
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'agent-update'; el.id = 'agentUpd';
+    el.innerHTML = '<div class="agent-update-dot"></div>' + escHtml(text);
+    container.appendChild(el);
+    scrollToBottom();
+    activeUpdElId = 'agentUpd';
+}
+function removeUpdateEl() { document.getElementById('agentUpd')?.remove(); activeUpdElId = null; }
+
+// ── SESSIONS ────────────────────────────────────────────────────
+function saveSession(firstMsg) {
+    const preview = (firstMsg || 'محادثة').slice(0, 40);
+    const idx = sessions.findIndex(s => s.id === currentSession);
+    const obj = { id: currentSession, preview, history: [...chatHistory] };
+    if (idx >= 0) sessions[idx] = obj; else sessions.unshift(obj);
+    sessions = sessions.slice(0, 15);
+    renderHistory();
+}
+function renderHistory() {
+    const list = document.getElementById('historyList');
+    list.innerHTML = sessions.map(s =>
+        '<div class="history-item" onclick="loadSession(' + s.id + ')">' + escHtml(s.preview) + '</div>'
+    ).join('');
+}
+function loadSession(id) {
+    const s = sessions.find(x => x.id === id); if (!s) return;
+    currentSession = id; chatHistory = s.history;
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('hero').classList.add('hidden');
+    for (const m of chatHistory) renderMessage(m.role === 'user' ? 'user' : 'ai', m.content, null);
+    if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('mobile-open');
+}
+function resetChat() {
+    saveSession('');
+    chatHistory = []; currentSession = Date.now();
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('hero').classList.remove('hidden');
+    document.querySelectorAll('.chip-step').forEach(c => c.classList.remove('chip-active'));
+    if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('mobile-open');
+}
+
+// ── UTILS ────────────────────────────────────────────────────────
+function scrollToBottom() { const c = document.getElementById('chatContainer'); c.scrollTop = c.scrollHeight; }
+function escHtml(t) { return String(t||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]); }
+</script>
+</body>
+</html>
