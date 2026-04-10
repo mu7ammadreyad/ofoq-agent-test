@@ -224,7 +224,7 @@ async function evalCode(env, code, purposeLabel, sendUpd) {
 // SECTION 4 — AI ENGINE (Gemini + Gemma Fallback)
 // ================================================================
 async function callAI(env, messages, systemPrompt, useGemma = false) {
-  const model  = useGemma ? (env.GEMMA_MODEL  || 'gemma-3-27b-it')               : (env.GEMINI_MODEL || 'gemini-2.5-flash-preview-04-17');
+  const model  = useGemma ? (env.GEMMA_MODEL  || 'gemma-4-26b-a4b-it')               : (env.GEMINI_MODEL || 'gemma-4-26b-a4b-it');
   const apiKey = useGemma ? (env.GEMMA_API_KEY || env.GEMINI_API_KEY)             : env.GEMINI_API_KEY;
   const base   = env.GEMINI_BASE || 'https://generativelanguage.googleapis.com/v1beta';
   const url    = `${base}/models/${model}:generateContent?key=${apiKey}`;
