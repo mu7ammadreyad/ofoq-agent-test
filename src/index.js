@@ -38,42 +38,55 @@ const DEFAULT_DOCS = {
   health: '# تقرير الصحة\n## آخر فحص: null\n\n## حالة التوكنز\n- GitHub: null\n- YouTube: null\n- Instagram: null\n- Facebook: null\n- TikTok: null\n\n## تحذيرات\n- لا تحذيرات حالياً\n',
 };
 
-// persona مدمجة في الكود (ثابتة — لا تحتاج KV)
-const PERSONA = `
-# أفق — OFOQ Publishing Agent v4.0
-## الهوية
-- الاسم: أفق | المهمة: نشر المحتوى الإسلامي تلقائياً | اللغة: عربي (مصري ودود)
+// PERSONA ثابتة في الكود — مش في KV عشان توفير وقت
+const PERSONA = `أنت أفق — OFOQ Publishing Agent v4.0
+مهمتك: نشر المحتوى الإسلامي تلقائياً على منصات التواصل.
+لغتك: عربي مصري ودود، مختصر، عملي.
 
-## الشخصية
-- أتكلم بوضوح، أشرح كل خطوة، أطلب تأكيداً قبل العمليات الحساسة
-- أبدأ المهام المهمة بـ "بسم الله" | ردودي مختصرة وعملية
+━━━ قاعدة مطلقة ━━━
+ردك دائماً JSON صالح فقط. لا شرح. لا markdown. لا نص قبله أو بعده.
 
-## منهج التفكير — ReAct + Plan-and-Solve
-1. PERCEIVE  → اقرأ الذاكرة وافهم الحالة
-2. REASON    → فكر بصوت عالٍ
-3. PLAN      → ضع خطة مرتبة
-4. ACT       → نفّذ (CODE أو MEMORY_UPDATE أو PLAN)
-5. OBSERVE   → استقبل النتيجة
-6. REFLECT   → هل نجحنا؟
-7. UPDATE    → حدّث الذاكرة
+━━━ الـ actions المتاحة ━━━
+SPEAK          → رد نصي عادي
+CODE           → تنفيذ كود JavaScript
+MEMORY_UPDATE  → حفظ بيانات في KV
+PLAN           → بناء خطة النشر اليومية + إطلاق Workflow
+HEALTH_CHECK   → فحص صحة كل التوكنز
+PENDING_PREVIEW→ عرض الفيديوهات المعلقة
 
-## شكل الـ JSON Response (دائماً JSON نظيف فقط)
-{"action":"SPEAK|CODE|MEMORY_UPDATE|PLAN|HEALTH_CHECK|PENDING_PREVIEW","thinking":"...","message":"...","code":"...","code_purpose":"...","memory_updates":[{"section":"...","data":{}}],"needs_followup":false,"retry_on_fail":false}
+━━━ شكل الـ JSON الإلزامي ━━━
+{"action":"...","thinking":"جملة واحدة عن سبب القرار","message":"الرد للمستخدم","code":"...","code_purpose":"...","memory_updates":[{"section":"...","data":{}}],"needs_followup":false,"retry_on_fail":false}
 
-## بيئة تنفيذ الكود (eval محلي في Worker — v4.0)
-- الكود يُنفَّذ داخل Cloudflare Worker مباشرة
-- استخدم __mem للوصول للذاكرة (tokens, settings)
-- fetch() متاح عالمياً
-- لا require/import | لا process.env | لا setTimeout طويل
-- النتيجة: return { success: bool, data: any, error: string|null }
-- مثال: const r = await fetch('https://api.github.com/user', {headers:{Authorization:'token '+__mem.github.token}}); return {success:r.ok, data:(await r.json()).login};
+━━━ مثال صحيح (SPEAK) ━━━
+{"action":"SPEAK","thinking":"المستخدم يسأل عن الحالة","message":"كل شيء تمام! الـ GitHub متصل والـ Workflow شغّال.","needs_followup":false}
 
-## قواعد JSON صارمة
-- JSON صالح فقط — لا نص قبله ولا بعده | لا markdown | لا تعليقات
-- message بدون newlines خام — استخدم \\n
+━━━ مثال صحيح (CODE) ━━━
+{"action":"CODE","thinking":"محتاج أتحقق من GitHub token","message":"جارٍ فحص الـ token...","code":"const r = await fetch('https://api.github.com/user', {headers:{Authorization:'token '+__mem.github.token,'User-Agent':'OFOQ'}});\\nconst d = await r.json();\\nreturn {success:r.ok, data:d.login};","code_purpose":"فحص GitHub token","needs_followup":true,"retry_on_fail":false}
 
-## القيم: لا نشر محتوى غير إسلامي | لا كلمات مرور | شفافية كاملة
-`;
+━━━ مثال صحيح (MEMORY_UPDATE) ━━━
+{"action":"MEMORY_UPDATE","thinking":"المستخدم أعطى GitHub token — أحفظه","message":"جارٍ حفظ بيانات GitHub...","memory_updates":[{"section":"github","data":{"token":"ghp_xxx","repo_owner":"myuser","repo_name":"ofoq-videos","status":"pending_verify"}}],"needs_followup":true}
+
+━━━ مثال خاطئ (لا تفعل هذا أبداً) ━━━
+بالطبع سأساعدك! دعني أفكر...
+**التفكير:** المستخدم يريد...
+\`\`\`json
+{"action": "CODE"...}
+\`\`\`
+
+━━━ قواعد الكود (eval داخل Cloudflare Worker) ━━━
+- __mem → الذاكرة: __mem.github.token, __mem.youtube.refresh_token, إلخ
+- fetch() متاح مباشرة
+- لا require/import | لا process.env | لا setTimeout
+- أعد: return {success:bool, data:any, error:string|null}
+- string في JSON: استخدم \\n بدل newline حقيقي، و\\' بدل quote
+
+━━━ قواعد message ━━━
+- لا newlines خام — استخدم \\n
+- لا quotes مفردة — استخدم \\'
+- مختصر ومفيد دائماً
+
+━━━ القيم ━━━
+لا نشر محتوى غير إسلامي | لا حفظ كلمات مرور | شفافية كاملة مع المستخدم`;
 
 // ================================================================
 // SECTION 1 — KV MEMORY ENGINE
@@ -114,23 +127,34 @@ async function appendLog(env, time, platform, video, status, detail) {
 }
 
 async function buildSystemPrompt(env) {
-  const mem    = await getMemory(env);
-  const plan   = await getDoc(env, 'plan');
-  const log    = await getDoc(env, 'log');
-  const health = await getDoc(env, 'health');
-  const queue  = await getDoc(env, 'queue');
-  const now    = new Date().toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
-  const memText = Object.entries(mem).map(([s, d]) =>
-    `## ${s}\n\`\`\`\n${Object.entries(d).map(([k, v]) => `${k}: ${v ?? 'null'}`).join('\n')}\n\`\`\``
-  ).join('\n\n');
+  // ← parallel reads — بدل sequential (كانت بتضيف ~200ms لكل KV call)
+  const [mem, plan, log, health, queue] = await Promise.all([
+    getMemory(env),
+    getDoc(env, 'plan'),
+    getDoc(env, 'log'),
+    getDoc(env, 'health'),
+    getDoc(env, 'queue'),
+  ]);
+  const now = new Date().toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
+
+  // احذف sections null من الذاكرة عشان تقصّر الـ prompt
+  const memText = Object.entries(mem).map(([s, d]) => {
+    const nonNull = Object.entries(d).filter(([, v]) => v != null && v !== 'null' && v !== 'not_configured');
+    if (!nonNull.length) return `## ${s}: غير مُهيأ`;
+    return `## ${s}\n${nonNull.map(([k, v]) => `${k}: ${v}`).join(' | ')}`;
+  }).join('\n');
+
+  // آخر 300 حرف من الـ log فقط (بدل 500)
+  const logSlice = log.slice(-300);
+
   return [
     PERSONA,
-    `\n## الذاكرة الحالية:\n${memText}`,
-    `\n## خطة اليوم:\n${plan}`,
-    `\n## آخر السجل:\n${log.slice(-500)}`,
-    `\n## صحة التوكنز:\n${health}`,
-    `\n## قائمة الفيديوهات:\n${queue}`,
-    `\nالوقت الآن (القاهرة): ${now}`,
+    `\n━━━ الذاكرة:\n${memText}`,
+    `\n━━━ الخطة:\n${plan.slice(0, 400)}`,
+    `\n━━━ آخر السجل:\n${logSlice}`,
+    `\n━━━ الصحة:\n${health.slice(0, 200)}`,
+    `\n━━━ الفيديوهات:\n${queue.slice(0, 200)}`,
+    `\nالوقت: ${now}`,
   ].join('\n');
 }
 
@@ -197,19 +221,23 @@ async function removeFromPending(owner, repo, token, video) {
 }
 
 // ================================================================
-// SECTION 3 — eval() CODE EXECUTOR
+// SECTION 3 — CODE EXECUTOR
+// يتطلب: compatibility_flags = ["unsafe_eval"] في wrangler.toml
+// بدون unsafe_eval: "Code generation from strings disallowed"
 // ================================================================
 async function evalCode(env, code, purposeLabel, sendUpd) {
   await sendUpd(`⚙️ تنفيذ: ${purposeLabel}`);
   const mem = await getMemory(env);
   try {
-    // AsyncFunction constructor — يعمل في strict mode / ES modules
-    // الكود يصل للذاكرة عبر __mem و fetch عبر الـ parameter مباشرة
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    const fn = new AsyncFunction('__mem', 'fetch', code);
+    // نبني الكود كـ async IIFE تستقبل __mem و fetch
+    // eval() يشتغل هنا لأن wrangler.toml فيه unsafe_eval
+    const wrappedCode = `(async (__mem, fetch) => { ${code} })(mem, globalThis.fetch)`;
+
+    // eslint-disable-next-line no-eval
+    const promise = eval(wrappedCode); // ← يعمل مع unsafe_eval flag فقط
 
     const result = await Promise.race([
-      fn(mem, globalThis.fetch),
+      promise,
       new Promise((_, rej) =>
         setTimeout(() => rej(new Error('انتهت مهلة التنفيذ (25s)')), 25_000)
       ),
@@ -222,63 +250,165 @@ async function evalCode(env, code, purposeLabel, sendUpd) {
 
 // ================================================================
 // SECTION 4 — AI ENGINE (Gemini 2.5 Flash + Gemma 3 Fallback)
-// كلاهما عبر نفس Google AI Studio API — مفتاح واحد يكفي
+// كلاهما عبر Google AI Studio — مفتاح واحد يكفي للاتنين
 // ================================================================
 async function callAI(env, messages, systemPrompt, useGemma = false) {
-  // النموذجان يشتغلان على نفس الـ endpoint بنفس الـ API key
   const model  = useGemma
-    ? 'gemma-3-27b-it'                    // ← Gemma 3 27B — fallback عند rate limit
-    : 'gemma-4-26b-a4b-it';   // ← Gemini 2.5 Flash — primary
+    ? 'gemma-3-27b-it'
+    : 'gemini-2.5-flash-preview-04-17';
 
-  // كلاهما يستخدم GEMINI_API_KEY (GEMMA_API_KEY اختياري للـ quota منفصل)
   const apiKey = useGemma
     ? (env.GEMMA_API_KEY || env.GEMINI_API_KEY)
     : env.GEMINI_API_KEY;
 
-  const base = 'https://generativelanguage.googleapis.com/v1beta';
-  const url  = `${base}/models/${model}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const body = {
-    contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-    generationConfig: { temperature: 0.7, maxOutputTokens: 4096, topP: 0.9 },
+    contents: messages.map(m => ({
+      role:  m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    })),
+    generationConfig: {
+      temperature:     0.4,   // ← أقل عشوائية = JSON أكثر اتساقاً
+      maxOutputTokens: 1500,  // ← كافي للـ JSON + يقلل وقت الاستجابة
+      topP:            0.85,
+      // ← الأهم: يُجبر Gemini على إخراج JSON فقط
+      responseMimeType: 'application/json',
+    },
   };
+
+  // Gemma لا يدعم responseMimeType — نحذفه له
+  if (useGemma) delete body.generationConfig.responseMimeType;
+
   if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
+
+  // ← timeout صريح 25 ثانية على الـ AI call عشان نتجنب 524
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 25_000);
 
   let resp;
   try {
-    resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    resp = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+      signal:  controller.signal,
+    });
   } catch (e) {
-    if (!useGemma) { await sleep(800); return callAI(env, messages, systemPrompt, true); }
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') throw new Error('AI timeout — جرب مرة أخرى');
+    if (!useGemma) { await sleep(500); return callAI(env, messages, systemPrompt, true); }
     throw e;
   }
+  clearTimeout(timeoutId);
 
   if (!resp.ok) {
+    // 429 rate limit أو 5xx → انتقل للـ fallback
     if ((resp.status === 429 || resp.status === 503 || resp.status === 500) && !useGemma) {
+      await sleep(300);
       return callAI(env, messages, systemPrompt, true);
     }
     const err = await resp.json().catch(() => ({}));
-    throw new Error(`AI ${resp.status}: ${JSON.stringify(err).slice(0, 200)}`);
+    throw new Error(`AI ${resp.status}: ${JSON.stringify(err).slice(0, 150)}`);
   }
 
   const data = await resp.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-function parseAI(text) {
-  if (!text) return { action: 'SPEAK', message: '' };
-  const m1 = text.match(/\{[\s\S]*\}/);
-  if (m1) { try { const p = JSON.parse(m1[0]); if (p?.message) return p; } catch {} }
-  const m2 = text.match(/```(?:json)?([\s\S]*?)```/);
-  if (m2) { try { const p = JSON.parse(m2[1].trim()); if (p?.message) return p; } catch {} }
-  const mMsg = text.match(/"message"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|"\s*$)/m);
-  if (mMsg) {
+function parseAI(raw) {
+  if (!raw) return { action: 'SPEAK', message: '' };
+
+  const text = raw.trim();
+
+  // ── Strategy 1: النص كله JSON نظيف ──────────────────────────
+  try {
+    const p = JSON.parse(text);
+    if (p?.action) return p;
+  } catch {}
+
+  // ── Strategy 2: جرّب كل {} block في النص — مش بس الأول أو الأخير
+  // الـ AI أحياناً بيكتب reasoning قبل الـ JSON
+  const blocks = [];
+  let depth = 0, start = -1;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') { if (depth === 0) start = i; depth++; }
+    else if (text[i] === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) { blocks.push(text.slice(start, i + 1)); start = -1; }
+    }
+  }
+  for (const block of blocks) {
+    try {
+      const p = JSON.parse(block);
+      if (p?.action && p?.message) return p;
+    } catch {}
+  }
+
+  // ── Strategy 3: داخل markdown code block ─────────────────────
+  const mdBlocks = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
+  for (const m of mdBlocks) {
+    try {
+      const p = JSON.parse(m[1].trim());
+      if (p?.action) return p;
+    } catch {}
+  }
+
+  // ── Strategy 4: إصلاح أول JSON block مكسور ───────────────────
+  if (blocks.length > 0) {
+    // خذ أكبر block (الأرجح إنه الـ JSON الكامل)
+    const biggest = blocks.reduce((a, b) => b.length > a.length ? b : a, '');
+    try {
+      const fixed = biggest
+        .replace(/:\s*'([^']*)'/g, ': "$1"')   // single → double quotes للقيم
+        .replace(/,\s*([}\]])/g, '$1')           // trailing commas
+        .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // unquoted keys
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '');
+      const p = JSON.parse(fixed);
+      if (p?.action) return p;
+    } catch {}
+  }
+
+  // ── Strategy 5: regex field extraction ───────────────────────
+  const getField = (key, multiline = false) => {
+    const patterns = [
+      new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`),
+      new RegExp(`"${key}"\\s*:\\s*'([^']*)'`),
+    ];
+    for (const re of patterns) {
+      const m = text.match(re);
+      if (m) return m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+    }
+    return '';
+  };
+  const getBool = key => {
+    const m = text.match(new RegExp(`"${key}"\\s*:\\s*(true|false)`));
+    return m ? m[1] === 'true' : false;
+  };
+
+  const action    = getField('action') || 'SPEAK';
+  const thinking  = getField('thinking');
+  const message   = getField('message');
+  const code      = getField('code', true);
+
+  if (message) {
     return {
-      action:  text.match(/"action"\s*:\s*"([^"]+)"/)?.[1] || 'SPEAK',
-      thinking:text.match(/"thinking"\s*:\s*"([^"]+)"/)?.[1] || '',
-      message: mMsg[1].replace(/\\n/g, '\n'),
+      action, thinking, message,
+      code, code_purpose: getField('code_purpose'),
+      needs_followup: getBool('needs_followup'),
+      retry_on_fail:  getBool('retry_on_fail'),
     };
   }
-  return { action: 'SPEAK', message: text.replace(/```json[\s\S]*?```/g, '').replace(/[{}]/g, '').trim() || text };
+
+  // ── Strategy 6 (آخر ملجأ): النص نفسه بعد تنظيفه ─────────────
+  const clean = text
+    .replace(/```json[\s\S]*?```/g, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\{[\s\S]*?\}/g, '')   // احذف كل الـ JSON blocks الفاشلة
+    .replace(/^\s*[*\-•]\s*/gm, '') // احذف bullet points
+    .trim();
+  return { action: 'SPEAK', message: clean || raw };
 }
 
 // ================================================================
@@ -999,4 +1129,4 @@ function jsonRes(obj, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
-             }
+}
