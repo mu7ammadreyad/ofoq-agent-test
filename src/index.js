@@ -203,15 +203,16 @@ async function evalCode(env, code, purposeLabel, sendUpd) {
   await sendUpd(`⚙️ تنفيذ: ${purposeLabel}`);
   const mem = await getMemory(env);
   try {
-    const wrapped = `
-      const __mem  = arguments[0];
-      const fetch  = arguments[1];
-      return (async () => { ${code} })();
-    `;
-    const fn = new Function(wrapped); // eslint-disable-line no-new-func
+    // AsyncFunction constructor — يعمل في strict mode / ES modules
+    // الكود يصل للذاكرة عبر __mem و fetch عبر الـ parameter مباشرة
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const fn = new AsyncFunction('__mem', 'fetch', code);
+
     const result = await Promise.race([
       fn(mem, globalThis.fetch),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('انتهت مهلة التنفيذ (25s)')), 25_000)),
+      new Promise((_, rej) =>
+        setTimeout(() => rej(new Error('انتهت مهلة التنفيذ (25s)')), 25_000)
+      ),
     ]);
     return { success: true, data: result ?? null };
   } catch (e) {
@@ -489,8 +490,19 @@ async function buildDailyPlanCore(env) {
   const fajr     = calcFajr(lat, lng);
   if (!fajr) return { error: 'تعذّر حساب وقت الفجر' };
 
-  const platforms = ['youtube', 'instagram', 'facebook', 'tiktok'].filter(p => mem[p]?.status === 'verified');
-  if (!platforms.length) return { error: 'لا توجد منصات مُفعّلة' };
+  const platforms = ['youtube', 'instagram', 'facebook', 'tiktok'].filter(p => {
+    const s = mem[p];
+    if (!s) return false;
+    // قبول المنصة لو status === 'verified' أو لو عندها token فعلي
+    if (s.status === 'verified' || s.status === 'active') return true;
+    // fallback: تحقق من وجود token فعلي (الـ AI ممكن ما يضبطش verified تلقائياً)
+    if (p === 'youtube')   return !!(s.refresh_token && s.client_id);
+    if (p === 'instagram') return !!(s.access_token && s.account_id);
+    if (p === 'facebook')  return !!(s.access_token && s.page_id);
+    if (p === 'tiktok')    return !!(s.access_token);
+    return false;
+  });
+  if (!platforms.length) return { error: 'لا توجد منصات مُهيأة — أضف tokens أولاً' };
 
   const { repo_owner, repo_name, token } = mem.github;
   if (!token) return { error: 'مفتاح GitHub غير موجود' };
@@ -580,9 +592,10 @@ async function getPendingPreview(env, count = 10) {
 // SECTION 12 — ReAct LOOP ENGINE
 // ================================================================
 async function reactLoop(env, userMsg, history, sendUpd) {
-  const sysPrompt = await buildSystemPrompt(env);
-  const conv      = [...history, { role: 'user', content: userMsg }];
-  let   execResult = null;
+  const sysPrompt   = await buildSystemPrompt(env);
+  const conv        = [...history, { role: 'user', content: userMsg }];
+  let   execResult  = null;
+  let   lastThinking = null; // ← نحتفظ بالـ thinking الأخير عبر كل الـ loops
 
   for (let loop = 0; loop < 7; loop++) {
     if (execResult) {
@@ -597,11 +610,15 @@ async function reactLoop(env, userMsg, history, sendUpd) {
     const parsed = parseAI(raw);
     const { action, thinking, message, code, code_purpose, memory_updates, needs_followup, retry_on_fail } = parsed;
 
-    if (thinking) await sendUpd(`🤔 ${thinking}`);
+    // ← احتفظ بالـ thinking في كل حالة وابعثه كـ update مرئي
+    if (thinking) {
+      lastThinking = thinking;
+      await sendUpd(`🤔 ${thinking}`);
+    }
 
     if (!action || action === 'SPEAK') {
       conv.push({ role: 'assistant', content: message || raw });
-      return { message: message || raw, thinking: thinking || null, history: conv };
+      return { message: message || raw, thinking: lastThinking, history: conv };
     }
 
     if (action === 'MEMORY_UPDATE') {
@@ -612,7 +629,7 @@ async function reactLoop(env, userMsg, history, sendUpd) {
       await sendUpd('✅ تم الحفظ!');
       if (!needs_followup) {
         conv.push({ role: 'assistant', content: message || '✅ تم الحفظ' });
-        return { message: message || '✅ تم الحفظ', history: conv };
+        return { message: message || '✅ تم الحفظ', thinking: lastThinking, history: conv };
       }
       execResult = { success: true, saved: true };
       conv.push({ role: 'assistant', content: message || 'تم الحفظ' });
@@ -622,15 +639,18 @@ async function reactLoop(env, userMsg, history, sendUpd) {
     if (action === 'CODE') {
       const result = await evalCode(env, code, code_purpose || 'تنفيذ', sendUpd);
       execResult   = result;
-      if (result.success) await sendUpd('✅ نجح التنفيذ!');
-      else { await sendUpd(`❌ فشل: ${result.error}`); if (retry_on_fail) await sendUpd('🔄 سيُعيد المحاولة...'); }
+      if (result.success) await sendUpd(`✅ نجح التنفيذ!`);
+      else {
+        await sendUpd(`❌ فشل: ${result.error}`);
+        if (retry_on_fail) await sendUpd('🔄 سيُعيد المحاولة...');
+      }
       conv.push({ role: 'assistant', content: `نتيجة التنفيذ: ${JSON.stringify(result)}` });
       if (!needs_followup) {
         conv.push({ role: 'user', content: 'أخبر المستخدم بما حدث بشكل ودي ومختصر.' });
         const fr = await callAI(env, conv, sysPrompt);
         const fm = parseAI(fr).message || fr;
         conv.push({ role: 'assistant', content: fm });
-        return { message: fm, history: conv };
+        return { message: fm, thinking: lastThinking, history: conv };
       }
       continue;
     }
@@ -638,24 +658,24 @@ async function reactLoop(env, userMsg, history, sendUpd) {
     if (action === 'PLAN') {
       const res = await buildDailyPlanFromChat(env, sendUpd);
       conv.push({ role: 'assistant', content: res.message });
-      return { message: res.message, history: conv };
+      return { message: res.message, thinking: lastThinking, history: conv };
     }
 
     if (action === 'HEALTH_CHECK') {
       const h   = await runHealthCheck(env, sendUpd);
       const msg = `🏥 **تقرير صحة التوكنز:**\n${Object.entries(h.results).map(([k,v]) => `- ${k}: ${v}`).join('\n')}${h.warnings.length ? '\n\n⚠️ **تحذيرات:**\n' + h.warnings.join('\n') : '\n\n✅ كل شيء سليم!'}`;
       conv.push({ role: 'assistant', content: msg });
-      return { message: msg, history: conv };
+      return { message: msg, thinking: lastThinking, history: conv };
     }
 
     if (action === 'PENDING_PREVIEW') {
       const preview = await getPendingPreview(env, 12);
       conv.push({ role: 'assistant', content: preview });
-      return { message: preview, history: conv };
+      return { message: preview, thinking: lastThinking, history: conv };
     }
 
     conv.push({ role: 'assistant', content: message || raw });
-    return { message: message || raw, thinking: thinking || null, history: conv };
+    return { message: message || raw, thinking: lastThinking, history: conv };
   }
 
   return { message: '❌ وصلت للحد الأقصى من الدورات. جرب مرة أخرى.', history: conv };
@@ -957,4 +977,4 @@ function jsonRes(obj, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
-}
+    }
