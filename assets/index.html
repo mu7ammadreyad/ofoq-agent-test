@@ -395,24 +395,24 @@ async function sendMessage(text, fileData) {
                 try {
                     const ev = JSON.parse(ln);
 
-                    // ① thinking_start → bubble نابضة فوراً (قبل الـ AI يفكر)
+                    // ① thinking_start → bubble نابضة فوراً
                     if (ev.type === 'thinking_start') {
                         thinkBubbleEl = createThinkBubble();
                     }
 
-                    // ② thinking → ملّأ الـ bubble بالمحتوى الفعلي
-                    if (ev.type === 'thinking') {
+                    // ② thinking_chunk → append النص الحقيقي chunk بـ chunk (real-time SSE)
+                    if (ev.type === 'thinking_chunk') {
                         if (!thinkBubbleEl) thinkBubbleEl = createThinkBubble();
-                        fillThinkBubble(thinkBubbleEl, ev.text);
+                        appendThinkChunk(thinkBubbleEl, ev.text);
                     }
 
-                    // ③ update → pill مؤقت (⚙️ تنفيذ / 💾 حفظ...)
+                    // ③ update → pill مؤقت (🔍 التحقق / 💾 حفظ...)
                     if (ev.type === 'update') showUpdatePill(ev.text);
 
-                    // ④ message → الرد النهائي، thinking بقي في bubble خاص به
+                    // ④ message → الرد النهائي
                     if (ev.type === 'message') {
                         removeUpdateEl();
-                        // لو الـ bubble فارغة (ما جاش thinking) — احذفها
+                        // لو الـ bubble فارغة (لم يأتِ thinking) — احذفها
                         if (thinkBubbleEl) {
                             const tc = thinkBubbleEl.querySelector('.think-content');
                             if (tc && !tc.classList.contains('has-content')) {
@@ -487,7 +487,7 @@ function renderMessage(role, text, fileData) {
     scrollToBottom();
 }
 
-// ── THINK BUBBLE (دائمة في الشات) ──────────────────────────────
+// ── THINK BUBBLE (real-time SSE thinking chunks) ───────────────
 function createThinkBubble() {
     const container = document.getElementById('messages');
     const d = document.createElement('div');
@@ -504,13 +504,16 @@ function createThinkBubble() {
     scrollToBottom();
     return d;
 }
-function fillThinkBubble(el, text) {
+// appendThinkChunk: يُضاف كل chunk من SSE فور وصوله
+function appendThinkChunk(el, chunk) {
     if (!el) return;
-    const tc   = el.querySelector('.think-content');
-    const txt  = el.querySelector('.think-text');
+    const tc  = el.querySelector('.think-content');
+    const txt = el.querySelector('.think-text');
     if (!tc || !txt) return;
-    txt.textContent = text;
-    tc.classList.add('has-content'); // يخفي النابض ويظهر النص
+    if (!tc.classList.contains('has-content')) {
+        tc.classList.add('has-content'); // يخفي النقاط النابضة
+    }
+    txt.textContent += chunk; // append مباشر — real-time
     scrollToBottom();
 }
 
@@ -566,4 +569,4 @@ function scrollToBottom() { const c = document.getElementById('chatContainer'); 
 function escHtml(t) { return String(t||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]); }
 </script>
 </body>
-    </html>
+                    </html>
