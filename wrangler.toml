@@ -15,7 +15,7 @@
 #     أضف (اختياري): GEMMA_API_KEY
 # ================================================================
 
-name               = "ofoq-agent"
+name = "ofoq-agent-test"
 main               = "src/index.js"
 compatibility_date = "2025-04-10"
 # nodejs_compat فقط — unsafe_eval لم يعد مطلوباً (Function Calling بدل eval)
