@@ -18,9 +18,8 @@
 name               = "ofoq-agent"
 main               = "src/index.js"
 compatibility_date = "2025-04-10"
-# unsafe_eval مطلوب لتشغيل الكود الديناميكي (eval / new Function)
-# بدونه: "Code generation from strings disallowed for this context"
-compatibility_flags = ["nodejs_compat", "unsafe_eval"]
+# nodejs_compat فقط — unsafe_eval لم يعد مطلوباً (Function Calling بدل eval)
+compatibility_flags = ["nodejs_compat"]
 
 # ── Workers Assets (يخدم assets/index.html تلقائياً) ────────────
 [assets]
@@ -45,7 +44,7 @@ crons = ["30 3 * * *"]
 
 # ── Environment Variables (غير السرية) ──────────────────────────
 [vars]
-GEMINI_MODEL = "gemma-4-26b-a4b-it"
+GEMINI_MODEL = "gemini-3.0-flash"
 GEMMA_MODEL  = "gemma-4-26b-a4b-it"
 GEMINI_BASE  = "https://generativelanguage.googleapis.com/v1beta"
 GH_API       = "https://api.github.com"
